@@ -43,6 +43,7 @@
     color: var(--muted);
     margin: 4px 0 24px 0;
     font-size: 15px;
+    text-align: center;
   }
   .subtitle .accent-green { color: var(--green); font-weight: 600; }
   .subtitle .accent-red   { color: var(--red);   font-weight: 600; }
@@ -342,7 +343,10 @@
 <body>
 
 <h1>Path Finder</h1>
-<p class="subtitle">Trace the path from <span class="accent-green">Start</span> to <span class="accent-red">Goal</span>.</p>
+<p class="subtitle">
+  Trace the path from <span class="accent-green">Start</span> to <span class="accent-red">Goal</span>.<br>
+  The number on each row and column tells you how many of its cells are on the path.
+</p>
 
 <div class="file-bar">
   <label class="button">
