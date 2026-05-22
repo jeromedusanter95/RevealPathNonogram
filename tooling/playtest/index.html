@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Path Finder, playtest</title>
+<style>
+  :root {
+    --bg: #f8fafc;
+    --panel: #ffffff;
+    --panel-shadow: rgba(15, 23, 42, 0.06);
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --muted: #64748b;
+    --green: #16a34a;
+    --red:   #dc2626;
+    --start-bg:    #dcfce7;
+    --start-ring:  #4ade80;
+    --goal-bg:     #fee2e2;
+    --goal-ring:   #fca5a5;
+    --path-bg:     #fef9c3;   /* yellow highlight like the prototype */
+    --hint:        #1f2937;
+    --user-path:   #1e293b;
+    --clue-strong: #16a34a;
+    --hover:       #e0f2fe;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  h1 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 700;
+  }
+  .subtitle {
+    color: var(--muted);
+    margin: 4px 0 24px 0;
+    font-size: 15px;
+  }
+  .subtitle .accent-green { color: var(--green); font-weight: 600; }
+  .subtitle .accent-red   { color: var(--red);   font-weight: 600; }
+
+  .file-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  label.button, button {
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  label.button:hover, button:hover { background: var(--hover); }
+  button.toggle.active { background: #fef3c7; border-color: #fbbf24; }
+  .meta { font-size: 13px; color: var(--muted); }
+
+  .levels {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 12px;
+    align-items: center;
+  }
+  .difficulty-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .difficulty-label {
+    width: 90px;
+    text-align: right;
+    font-weight: 600;
+    font-size: 14px;
+    text-transform: capitalize;
+  }
+  .difficulty-label.easy      { color: #16a34a; }
+  .difficulty-label.medium    { color: #ca8a04; }
+  .difficulty-label.difficult { color: #ea580c; }
+  .difficulty-label.expert    { color: #dc2626; }
+  .difficulty-label.divinity  { color: #7c3aed; }
+  .level-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .level-buttons button {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 700;
+    background: var(--panel);
+  }
+  .level-buttons button.active {
+    background: var(--text);
+    color: white;
+    border-color: var(--text);
+  }
+  .level-info {
+    display: flex;
+    justify-content: center;
+    width: 540px;
+    max-width: 100%;
+    margin-bottom: 12px;
+    font-size: 14px;
+  }
+  .level-info .left  { font-weight: 600; }
+  .level-info .right { display: none; }
+
+  .board-card {
+    background: var(--panel);
+    border-radius: 16px;
+    box-shadow: 0 1px 3px var(--panel-shadow), 0 8px 24px var(--panel-shadow);
+    padding: 24px;
+    /* Card stretches with grid size; min-width keeps the small grids spacious. */
+    min-width: 540px;
+    max-width: 100%;
+    width: max-content;
+  }
+  .board-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .palette {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 10px;
+    background: var(--panel);
+    border-radius: 12px;
+    box-shadow: 0 1px 3px var(--panel-shadow);
+  }
+  .palette-title {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 2px;
+  }
+  .palette-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 36px);
+    gap: 6px;
+  }
+  .palette-swatch {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    position: relative;
+    padding: 0;
+  }
+  .palette-swatch.active {
+    border-color: #2563eb;
+    box-shadow: inset 0 0 0 2px #93c5fd;
+  }
+  .palette-swatch svg {
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+  .palette-eraser {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--muted);
+  }
+  .palette-eraser.active {
+    background: #fee2e2;
+    color: var(--red);
+    border-color: #fca5a5;
+  }
+  .cell svg.draft-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: 0.55;
+  }
+  .board-grid {
+    display: grid;
+    /* one column for row clues, then `width` columns for cells */
+  }
+  .clue-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: var(--text);
+    font-size: 18px;
+  }
+  .clue-cell.col { padding: 4px 0 12px 0; }
+  .clue-cell.row { padding: 0 12px 0 4px; }
+  .clue-cell.satisfied { color: var(--clue-strong); }
+  .clue-cell.exceeded  { color: var(--red); }
+
+  .grid-area {
+    display: grid;
+    gap: 0;
+    border: 1px solid var(--border);
+    background: white;
+  }
+  .cell {
+    width: var(--cell-size, 60px);
+    height: var(--cell-size, 60px);
+    border: 1px solid var(--border);
+    margin: -1px 0 0 -1px;   /* overlap borders so they don't double up */
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+    background: white;
+    overflow: visible;
+  }
+  .clue-cell { font-size: calc(var(--cell-size, 60px) * 0.3); }
+  .cell.start::after, .cell.goal::after {
+    /* S/G label size scales with cell size. */
+    font-size: calc(var(--cell-size, 60px) * 0.18);
+  }
+  .cell.start      { background: var(--start-bg); }
+  .cell.goal       { background: var(--goal-bg);  }
+  .cell.start.user-path { background: var(--start-bg); }   /* keep S green */
+  .cell.goal.user-path  { background: var(--goal-bg); }
+  .cell.path-cell  { background: var(--path-bg); }         /* solution overlay */
+  .cell.user-path:not(.start):not(.goal) {
+    background: var(--user-path);
+  }
+  .cell.user-path:not(.start):not(.goal) .label-letter { color: white; }
+  .cell.start::after, .cell.goal::after {
+    content: attr(data-letter);
+    position: absolute;
+    top: 4px;
+    left: 6px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .cell.start::after { color: var(--green); }
+  .cell.goal::after  { color: var(--red);   }
+  .cell svg.hint-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+  .cell svg.user-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+  .cell:hover:not(.start):not(.goal) {
+    box-shadow: inset 0 0 0 2px #38bdf8;
+  }
+
+  /* Decision-tile debug highlight. Overrides hover ring when active. */
+  .cell.decision-tile {
+    box-shadow: inset 0 0 0 3px #f97316;  /* orange ring */
+  }
+  .cell.decision-tile .decision-badge {
+    position: absolute;
+    top: 2px;
+    right: 3px;
+    background: #f97316;
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 6px;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  .controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 16px;
+  }
+  .controls .left { color: var(--muted); font-size: 14px; }
+  .controls .right { display: flex; gap: 8px; }
+  .controls button.solution {
+    background: #fef9c3;
+    border-color: #facc15;
+    color: #854d0e;
+  }
+  .controls button.help-btn {
+    background: #dbeafe;
+    border-color: #60a5fa;
+    color: #1e40af;
+  }
+  .controls button.help-btn:disabled {
+    background: #f1f5f9;
+    border-color: var(--border);
+    color: #94a3b8;
+    cursor: not-allowed;
+  }
+
+  .help {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 540px;
+    max-width: 100%;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .status {
+    margin-top: 14px;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .status.win { color: var(--green); font-weight: 700; font-size: 16px; }
+</style>
+</head>
+<body>
+
+<h1>Path Finder</h1>
+<p class="subtitle">Trace the path from <span class="accent-green">Start</span> to <span class="accent-red">Goal</span>.</p>
+
+<div class="file-bar">
+  <label class="button">
+    Load pack
+    <input type="file" id="file-input" accept=".json" style="display:none">
+  </label>
+  <span id="pack-info" class="meta"></span>
+</div>
+
+<div class="levels" id="levels"></div>
+
+<div id="level-info" class="level-info" style="display:none;">
+  <span class="left" id="level-name"></span>
+  <span class="right" id="hint-summary"></span>
+</div>
+
+<div class="board-row" id="board-row" style="display:none;">
+  <div class="board-card" id="board-card">
+    <div class="board-grid" id="board-grid"></div>
+
+    <div class="controls">
+      <div class="left" id="step-counter"></div>
+      <div class="right">
+        <button class="help-btn" id="btn-help">💡 Help (3)</button>
+        <button class="solution" id="btn-solution">👁 Show solution</button>
+        <button id="btn-decisions" style="display:none;">🟠 Show decisions</button>
+        <button id="btn-reset">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="palette" id="palette">
+    <div class="palette-title">Drafts</div>
+    <div class="palette-grid" id="palette-grid"></div>
+    <button class="palette-eraser" id="palette-eraser">🧽 Erase</button>
+  </div>
+</div>
+
+<div class="help" id="help" style="display:none;">
+  <span>💡 Click adjacent tiles to extend. Click last tile to undo.</span>
+</div>
+
+<div class="status" id="status"></div>
+
+<script>
+"use strict";
+
+const POINTS_BY_SIDE = {
+  N: [30, 0], E: [60, 30], S: [30, 60], W: [0, 30],
+};
+const CENTER = [30, 30];
+
+let pack = null;
+let currentIndex = 0;
+let userPath = [];
+let showSolution = false;
+let showDecisions = false;
+// Help feature: per-level revealed glyphs and remaining charges.
+// Reset on every selectPuzzle() call so each grid starts fresh with 3 charges.
+const HELP_MAX_CHARGES = 3;
+let helpChargesLeft = HELP_MAX_CHARGES;
+let helpRevealedCells = new Set();
+
+// Draft feature: select a glyph from the palette, then click cells to mark
+// them with that glyph (Sudoku-style candidate notes). Drafts coexist with
+// tracing: a cell that becomes part of the user's drawn path stops showing
+// its draft. Drafts reset on level switch and on Reset.
+//
+// `userDrafts` maps cellKey -> Array of side strings ("N","E","S","W"). The
+// array shape matches the Segment representation used by hints, so the same
+// SVG renderer works for both. Length is 1 or 2.
+let userDrafts = new Map();
+// One of: null (no glyph selected), "erase" (click to remove), or
+// an Array of sides (the selected palette glyph).
+let selectedPaletteGlyph = null;
+
+// The 10 line glyph shapes available in the palette, plus a "cross" marker
+// for "this cell is NOT on the path". Endpoints (1-sided) first, then
+// straights, then corners. The cross uses the sentinel value ["X"] so the
+// rest of the code can disambiguate it from real Segment side-sets.
+const PALETTE_GLYPHS = [
+  ["N"], ["E"], ["S"], ["W"],
+  ["N", "S"], ["E", "W"],
+  ["N", "E"], ["N", "W"], ["S", "E"], ["S", "W"],
+  ["X"],
+];
+
+function isCrossGlyph(sides) {
+  return Array.isArray(sides) && sides.length === 1 && sides[0] === "X";
+}
+
+function sameSides(a, b) {
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  const sa = new Set(a);
+  for (const x of b) if (!sa.has(x)) return false;
+  return true;
+}
+
+function loadPackFromText(text) {
+  pack = JSON.parse(text);
+  document.getElementById("pack-info").textContent =
+    `${pack.pack_id} · ${pack.puzzles.length} puzzles`;
+  buildLevels();
+  selectPuzzle(0);
+}
+
+document.getElementById("file-input").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  loadPackFromText(await file.text());
+});
+
+async function autoLoadFromQuery() {
+  // Auto-load a pack when the URL has ?pack=<name>. The name is resolved
+  // against the packs/ folder served next to this HTML, with .json appended
+  // if missing. Falls back silently (file picker stays visible) if the fetch
+  // fails, so a bad share link doesn't leave the page in a broken state.
+  const params = new URLSearchParams(window.location.search);
+  const name = params.get("pack");
+  if (!name) return;
+  const safe = name.replace(/[^A-Za-z0-9._-]/g, "");
+  if (!safe) return;
+  const url = `packs/${safe.endsWith(".json") ? safe : safe + ".json"}`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    loadPackFromText(await resp.text());
+  } catch (err) {
+    document.getElementById("pack-info").textContent =
+      `Could not load pack "${safe}": ${err.message}`;
+  }
+}
+autoLoadFromQuery();
+
+function buildLevels() {
+  const container = document.getElementById("levels");
+  container.innerHTML = "";
+
+  // If puzzles carry an explicit difficulty_name, group by it.
+  // Otherwise, lay out a single row of buttons (one per puzzle).
+  const hasGroups = pack.puzzles.some(p => p.difficulty_name);
+
+  if (hasGroups) {
+    const groups = new Map();
+    pack.puzzles.forEach((puzzle, i) => {
+      const name = puzzle.difficulty_name || "levels";
+      if (!groups.has(name)) groups.set(name, []);
+      groups.get(name).push(i);
+    });
+    let counter = 0;
+    for (const [name, indices] of groups) {
+      const row = document.createElement("div");
+      row.className = "difficulty-row";
+      const label = document.createElement("div");
+      label.className = "difficulty-label " + name.toLowerCase();
+      label.textContent = name;
+      row.appendChild(label);
+      const buttons = document.createElement("div");
+      buttons.className = "level-buttons";
+      indices.forEach((puzzleIndex) => {
+        counter++;
+        buttons.appendChild(makeLevelButton(puzzleIndex, counter));
+      });
+      row.appendChild(buttons);
+      container.appendChild(row);
+    }
+  } else {
+    // Single row, no difficulty grouping. Just numbered 1..N.
+    const row = document.createElement("div");
+    row.className = "difficulty-row";
+    const buttons = document.createElement("div");
+    buttons.className = "level-buttons";
+    pack.puzzles.forEach((_, i) => {
+      buttons.appendChild(makeLevelButton(i, i + 1));
+    });
+    row.appendChild(buttons);
+    container.appendChild(row);
+  }
+}
+
+function makeLevelButton(puzzleIndex, displayNumber) {
+  const puzzle = pack.puzzles[puzzleIndex];
+  const btn = document.createElement("button");
+  btn.textContent = String(displayNumber);
+  btn.dataset.puzzleIndex = String(puzzleIndex);
+  const d = puzzle.difficulty;
+  const size = `${puzzle.width}x${puzzle.height}`;
+  const score = d.perceived_score !== undefined
+    ? `score ${d.perceived_score.toFixed(0)}, `
+    : "";
+  btn.title = `${size}, ${score}decisions ${d.n_decisions ?? "?"} (weight ${d.total_decision_weight ?? "?"}), path ${d.path_length}, hints ${d.hint_count}`;
+  btn.addEventListener("click", () => selectPuzzle(puzzleIndex));
+  return btn;
+}
+
+function selectPuzzle(index) {
+  currentIndex = index;
+  const p = pack.puzzles[index];
+  userPath = [keyOf(p.start)];
+  showSolution = false;
+  showDecisions = false;
+  document.getElementById("btn-solution").classList.remove("active");
+  document.getElementById("btn-solution").textContent = "👁 Show solution";
+  document.getElementById("btn-decisions").classList.remove("active");
+  document.getElementById("btn-decisions").textContent = "🟠 Show decisions";
+
+  // Reset help state: every grid starts with HELP_MAX_CHARGES.
+  helpChargesLeft = HELP_MAX_CHARGES;
+  helpRevealedCells = new Set();
+  updateHelpButton();
+
+  // Reset draft state: every grid starts with no drafts and no selection.
+  userDrafts = new Map();
+  selectedPaletteGlyph = null;
+  renderPalette();
+
+  document.querySelectorAll("#levels button").forEach((b) => {
+    b.classList.toggle("active", Number(b.dataset.puzzleIndex) === index);
+  });
+
+  document.getElementById("level-info").style.display = "flex";
+  const sizeTxt = `${p.width}x${p.height}`;
+  const diffName = p.difficulty_name ? `${p.difficulty_name}, ${sizeTxt}` : sizeTxt;
+  document.getElementById("level-name").textContent =
+    `Level ${index + 1} (${diffName})`;
+  // Player-facing right-side info: only the clue count. Score / decision
+  // metrics are kept in the DOM for debugging but suppressed here for the
+  // friends-and-family build.
+  document.getElementById("hint-summary").textContent =
+    `${p.hints.length} clue${p.hints.length === 1 ? "" : "s"} revealed`;
+
+  document.getElementById("board-row").style.display = "flex";
+  document.getElementById("help").style.display = "flex";
+  render();
+}
+
+function keyOf(pair) { return `${pair[0]},${pair[1]}`; }
+function fromKey(key) { return key.split(",").map(Number); }
+
+function cellSizeFor(width, height) {
+  // Cell size scales down on bigger grids so a 10x10 board still fits the
+  // viewport. Calibrated against 5x5 = 60px (the original hardcoded value).
+  // 10x10 settles around 40px; 7x7 around 50px.
+  const target = Math.floor(500 / Math.max(width, height));
+  return Math.max(30, Math.min(60, target));
+}
+
+function clueGutterFor(cellSize) {
+  // Clue gutter scales with cell size but caps at 40 to keep small grids
+  // visually identical to the original.
+  return Math.max(28, Math.min(40, Math.round(cellSize * 0.7)));
+}
+
+function render() {
+  const p = pack.puzzles[currentIndex];
+  const root = document.getElementById("board-grid");
+  root.innerHTML = "";
+
+  const cellSize = cellSizeFor(p.width, p.height);
+  const gutter = clueGutterFor(cellSize);
+  document.documentElement.style.setProperty("--cell-size", `${cellSize}px`);
+
+  // Grid: 1 + width columns, 1 + height rows
+  root.style.gridTemplateColumns = `${gutter}px repeat(${p.width}, ${cellSize}px)`;
+  root.style.gridTemplateRows = `${gutter}px repeat(${p.height}, ${cellSize}px)`;
+
+  // Top-left empty corner
+  const corner = document.createElement("div");
+  root.appendChild(corner);
+
+  // Column clues row
+  for (let c = 0; c < p.width; c++) {
+    const cell = document.createElement("div");
+    cell.className = "clue-cell col";
+    cell.textContent = String(p.col_counts[c]);
+    const colState = columnState(p, c);
+    if (colState === "exceeded")  cell.classList.add("exceeded");
+    if (colState === "satisfied") cell.classList.add("satisfied");
+    root.appendChild(cell);
+  }
+
+  // Grid area takes the rest. Render row by row.
+  const sKey = keyOf(p.start);
+  const gKey = keyOf(p.goal);
+  const hintMap = new Map();
+  for (const h of p.hints) hintMap.set(keyOf(h.cell), new Set(h.sides));
+  // Merge help-revealed hints (derived from solution path neighbors). Help
+  // never targets S or G, so each entry is a 2-sided segment.
+  for (const key of helpRevealedCells) {
+    if (hintMap.has(key)) continue; // already revealed by the puzzle itself
+    const sides = sidesForPathCell(p, key);
+    if (sides) hintMap.set(key, sides);
+  }
+
+  // When Show Solution is toggled, render the full solution path as
+  // segment lines (just like the user's drawn path), in addition to the
+  // yellow background.
+  const solutionKeys = p.solution_path.map(c => keyOf(c));
+  const solutionSet = new Set(showSolution ? solutionKeys : []);
+  const solutionAsPath = showSolution ? solutionKeys : null;
+
+  // When Show Decisions is toggled, mark cells where the player faces a fork.
+  // For each decision entry [step, n_candidates, trap_depth, weight], the tip
+  // cell is solution_path[step - 1]. Map: cell-key -> weight.
+  const decisionWeightByKey = new Map();
+  if (showDecisions && p.difficulty && Array.isArray(p.difficulty.decisions)) {
+    for (const [step, n_cands, trap, weight] of p.difficulty.decisions) {
+      const tipCell = p.solution_path[step - 1];
+      if (tipCell) decisionWeightByKey.set(keyOf(tipCell), { weight, n_cands, trap });
+    }
+  }
+
+  for (let r = 0; r < p.height; r++) {
+    const rowClue = document.createElement("div");
+    rowClue.className = "clue-cell row";
+    rowClue.textContent = String(p.row_counts[r]);
+    const rowS = rowState(p, r);
+    if (rowS === "exceeded")  rowClue.classList.add("exceeded");
+    if (rowS === "satisfied") rowClue.classList.add("satisfied");
+    root.appendChild(rowClue);
+
+    for (let c = 0; c < p.width; c++) {
+      const cell = document.createElement("div");
+      cell.className = "cell";
+      const key = `${c},${r}`;
+      cell.dataset.cell = key;
+
+      const isStart = key === sKey;
+      const isGoal  = key === gKey;
+      const onUserPath = userPath.includes(key);
+      const onSolution = solutionSet.has(key);
+
+      if (isStart) {
+        cell.classList.add("start");
+        cell.dataset.letter = "S";
+      }
+      if (isGoal)  {
+        cell.classList.add("goal");
+        cell.dataset.letter = "G";
+      }
+      if (onSolution) cell.classList.add("path-cell");
+      if (onUserPath) cell.classList.add("user-path");
+
+      // Hint glyph (always visible). If the cell is currently part of the
+      // user's traced path, recolor the hint to the path color instead of
+      // drawing a separate user-path overlay; that way the hint shape stays
+      // identical (a corner stays a corner) and only its color changes.
+      const sides = hintMap.get(key);
+      if (sides) {
+        const hintColor = onUserPath
+          ? (isStart ? "var(--green)" : isGoal ? "var(--red)" : "white")
+          : null;
+        cell.appendChild(makeHintSvg(sides, isStart, isGoal, hintColor));
+      }
+
+      // Solution overlay: draw the full solution path as line segments.
+      // Only on non-hint cells; hint cells already show the segment via the
+      // hint glyph above.
+      if (solutionAsPath && !sides) {
+        const solOverlay = makePathOverlay(solutionAsPath, c, r, "solution");
+        if (solOverlay) cell.appendChild(solOverlay);
+      }
+
+      // User path lines on non-hint cells. Hint cells use the recolored hint
+      // glyph above, so we never draw a user overlay on top of a hint.
+      if (!sides) {
+        const userOverlay = makePathOverlay(userPath, c, r, "user");
+        if (userOverlay) cell.appendChild(userOverlay);
+      }
+
+      // Draft glyph: render the user's draft note for this cell. Only shown
+      // when the cell has no real hint and is not on the user's drawn path
+      // (those would overlap and confuse the read).
+      const draftSides = userDrafts.get(key);
+      if (draftSides && !sides && !onUserPath) {
+        const draftSvg = isCrossGlyph(draftSides)
+          ? makeCrossSvg("#94a3b8")
+          : makeHintSvg(new Set(draftSides), false, false, "#94a3b8");
+        draftSvg.classList.remove("hint-svg");
+        draftSvg.classList.add("draft-svg");
+        cell.appendChild(draftSvg);
+      }
+
+      // Decision-tile debug overlay. Adds an orange ring and a weight badge
+      // to cells where the player faces a fork. Active only when
+      // showDecisions is true.
+      const decisionInfo = decisionWeightByKey.get(key);
+      if (decisionInfo) {
+        cell.classList.add("decision-tile");
+        cell.title = `Decision: ${decisionInfo.n_cands} candidates, trap_depth=${decisionInfo.trap}, weight=${decisionInfo.weight}`;
+        const badge = document.createElement("div");
+        badge.className = "decision-badge";
+        badge.textContent = String(decisionInfo.weight);
+        cell.appendChild(badge);
+      }
+
+      cell.addEventListener("click", () => onCellClick(c, r));
+      root.appendChild(cell);
+    }
+  }
+
+  updateStatus();
+  document.getElementById("step-counter").textContent =
+    `Steps: ${Math.max(0, userPath.length - 1)} / ${p.solution_path.length - 1}`;
+  // Keep the Help button's enabled state in sync with the player's drawn
+  // path: as cells get covered, the pool of useful reveal candidates shrinks.
+  updateHelpButton();
+}
+
+function makeHintSvg(sides, isStart, isGoal, overrideColor) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 60 60");
+  svg.classList.add("hint-svg");
+
+  // Endpoints draw a colored line; mid-segments draw a dark grey line.
+  // overrideColor lets the renderer recolor a hint when its cell is part of
+  // the user's traced path; the shape stays identical, only the color changes.
+  let color = "var(--hint)";
+  if (isStart) color = "var(--green)";
+  if (isGoal)  color = "var(--red)";
+  if (overrideColor) color = overrideColor;
+
+  const sidesArray = Array.from(sides);
+  if (sidesArray.length === 2) {
+    // Straight or corner: draw a single polyline through the two side points and the center.
+    const [a, b] = sidesArray;
+    const pa = POINTS_BY_SIDE[a];
+    const pb = POINTS_BY_SIDE[b];
+    const points = [pa, CENTER, pb];
+    const poly = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    poly.setAttribute("points", points.map(p => p.join(",")).join(" "));
+    poly.setAttribute("fill", "none");
+    poly.setAttribute("stroke", color);
+    poly.setAttribute("stroke-width", "4");
+    poly.setAttribute("stroke-linecap", "round");
+    poly.setAttribute("stroke-linejoin", "round");
+    svg.appendChild(poly);
+  } else if (sidesArray.length === 1) {
+    // Endpoint hint: short line from center to the single side.
+    const p = POINTS_BY_SIDE[sidesArray[0]];
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", CENTER[0]); line.setAttribute("y1", CENTER[1]);
+    line.setAttribute("x2", p[0]);      line.setAttribute("y2", p[1]);
+    line.setAttribute("stroke", color);
+    line.setAttribute("stroke-width", "4");
+    line.setAttribute("stroke-linecap", "round");
+    svg.appendChild(line);
+  }
+  return svg;
+}
+
+function makeCrossSvg(color) {
+  // Draft-only "X" marker meaning "the path does NOT pass through this cell."
+  // Two diagonals inset from the cell borders so they read clearly without
+  // touching the cell edges. viewBox matches makeHintSvg (60x60 logical).
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 60 60");
+  svg.classList.add("hint-svg");
+  const stroke = color || "#94a3b8";
+  const mkLine = (x1, y1, x2, y2) => {
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", x1); line.setAttribute("y1", y1);
+    line.setAttribute("x2", x2); line.setAttribute("y2", y2);
+    line.setAttribute("stroke", stroke);
+    line.setAttribute("stroke-width", "4");
+    line.setAttribute("stroke-linecap", "round");
+    svg.appendChild(line);
+  };
+  mkLine(14, 14, 46, 46);
+  mkLine(46, 14, 14, 46);
+  return svg;
+}
+
+function makePathOverlay(path, c, r, mode) {
+  const key = `${c},${r}`;
+  const idx = path.indexOf(key);
+  if (idx < 0) return null;
+
+  const sides = [];
+  if (idx > 0)              sides.push(directionTo(path[idx], path[idx - 1]));
+  if (idx < path.length-1)  sides.push(directionTo(path[idx], path[idx + 1]));
+  if (sides.length === 0)   return null;
+
+  // Pick a stroke color and width based on mode.
+  // user mode: white on dark user-path cells; colored at S/G.
+  // solution mode: dark line over the yellow background.
+  const p0 = pack.puzzles[currentIndex];
+  const isS = key === keyOf(p0.start);
+  const isG = key === keyOf(p0.goal);
+
+  let strokeColor;
+  let strokeWidth;
+  if (mode === "user") {
+    strokeColor = isS ? "var(--green)" : (isG ? "var(--red)" : "white");
+    strokeWidth = 6;
+  } else {
+    strokeColor = isS ? "var(--green)" : (isG ? "var(--red)" : "#1e293b");
+    strokeWidth = 5;
+  }
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 60 60");
+  svg.classList.add(mode === "user" ? "user-svg" : "solution-svg");
+
+  if (sides.length === 2) {
+    const points = [POINTS_BY_SIDE[sides[0]], CENTER, POINTS_BY_SIDE[sides[1]]];
+    const poly = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    poly.setAttribute("points", points.map(p => p.join(",")).join(" "));
+    poly.setAttribute("fill", "none");
+    poly.setAttribute("stroke", strokeColor);
+    poly.setAttribute("stroke-width", strokeWidth);
+    poly.setAttribute("stroke-linecap", "round");
+    poly.setAttribute("stroke-linejoin", "round");
+    svg.appendChild(poly);
+  } else {
+    const p = POINTS_BY_SIDE[sides[0]];
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", CENTER[0]); line.setAttribute("y1", CENTER[1]);
+    line.setAttribute("x2", p[0]);      line.setAttribute("y2", p[1]);
+    line.setAttribute("stroke", strokeColor);
+    line.setAttribute("stroke-width", strokeWidth);
+    line.setAttribute("stroke-linecap", "round");
+    svg.appendChild(line);
+  }
+  return svg;
+}
+
+function directionTo(from, to) {
+  const [fc, fr] = fromKey(from);
+  const [tc, tr] = fromKey(to);
+  if (tc === fc - 1) return "W";
+  if (tc === fc + 1) return "E";
+  if (tr === fr - 1) return "N";
+  if (tr === fr + 1) return "S";
+  return null;
+}
+
+function renderPalette() {
+  // Rebuild the palette grid. Each swatch is a small SVG of one possible
+  // glyph shape, plus an "Erase" button to clear drafts.
+  const grid = document.getElementById("palette-grid");
+  if (!grid) return;
+  grid.innerHTML = "";
+  for (const sides of PALETTE_GLYPHS) {
+    const btn = document.createElement("button");
+    btn.className = "palette-swatch";
+    if (
+      selectedPaletteGlyph !== "erase" &&
+      selectedPaletteGlyph !== null &&
+      sameSides(selectedPaletteGlyph, sides)
+    ) {
+      btn.classList.add("active");
+    }
+    const svg = isCrossGlyph(sides)
+      ? makeCrossSvg("#374151")
+      : makeHintSvg(new Set(sides), false, false, "#374151");
+    btn.appendChild(svg);
+    btn.addEventListener("click", () => onPaletteClick(sides));
+    grid.appendChild(btn);
+  }
+  const eraser = document.getElementById("palette-eraser");
+  if (eraser) {
+    eraser.classList.toggle("active", selectedPaletteGlyph === "erase");
+  }
+}
+
+function onPaletteClick(sides) {
+  // Click an active glyph to deselect; click a different one to select it.
+  if (
+    selectedPaletteGlyph !== "erase" &&
+    selectedPaletteGlyph !== null &&
+    sameSides(selectedPaletteGlyph, sides)
+  ) {
+    selectedPaletteGlyph = null;
+  } else {
+    selectedPaletteGlyph = sides.slice();
+  }
+  renderPalette();
+}
+
+function sidesForPathCell(p, key) {
+  // For a help-revealed glyph: derive the 2-sided segment from the
+  // solution_path neighbors of `key`. Returns null if the cell is not on the
+  // path or is S/G (help should never target endpoints).
+  const pathKeys = p.solution_path.map(c => keyOf(c));
+  const idx = pathKeys.indexOf(key);
+  if (idx <= 0 || idx >= pathKeys.length - 1) return null;
+  const sides = new Set();
+  sides.add(directionTo(key, pathKeys[idx - 1]));
+  sides.add(directionTo(key, pathKeys[idx + 1]));
+  return sides;
+}
+
+function updateHelpButton() {
+  const btn = document.getElementById("btn-help");
+  if (!btn) return;
+  btn.textContent = `💡 Help (${helpChargesLeft})`;
+  btn.disabled = helpChargesLeft <= 0 || !hasUnrevealedPathCell();
+}
+
+function hasUnrevealedPathCell() {
+  // True iff at least one non-endpoint path cell has no visible hint, hasn't
+  // been revealed by a previous help charge on this grid, and isn't already
+  // on the player's drawn path. If none qualify, the Help button is disabled.
+  const p = pack && pack.puzzles[currentIndex];
+  if (!p) return false;
+  const sKey = keyOf(p.start);
+  const gKey = keyOf(p.goal);
+  const alreadyHinted = new Set(p.hints.map(h => keyOf(h.cell)));
+  const drawn = new Set(userPath);
+  for (const cell of p.solution_path) {
+    const key = keyOf(cell);
+    if (key === sKey || key === gKey) continue;
+    if (alreadyHinted.has(key)) continue;
+    if (helpRevealedCells.has(key)) continue;
+    if (drawn.has(key)) continue;
+    return true;
+  }
+  return false;
+}
+
+function useHelpCharge() {
+  if (helpChargesLeft <= 0) return;
+  const p = pack.puzzles[currentIndex];
+  const sKey = keyOf(p.start);
+  const gKey = keyOf(p.goal);
+  const alreadyHinted = new Set(p.hints.map(h => keyOf(h.cell)));
+  // Cells the player has already drawn the path through don't need help: the
+  // player has already committed to them and seeing the glyph there would be
+  // wasted information. Skip them.
+  const drawn = new Set(userPath);
+  const candidates = [];
+  for (const cell of p.solution_path) {
+    const key = keyOf(cell);
+    if (key === sKey || key === gKey) continue;
+    if (alreadyHinted.has(key)) continue;
+    if (helpRevealedCells.has(key)) continue;
+    if (drawn.has(key)) continue;
+    candidates.push(key);
+  }
+  if (!candidates.length) return; // nothing left to reveal
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  helpRevealedCells.add(pick);
+  helpChargesLeft -= 1;
+  updateHelpButton();
+  render();
+}
+
+function _occupiedCells(p) {
+  // The set of cells currently considered "on the path" for clue-checking:
+  //  - the user's drawn path,
+  //  - S and G (always endpoints, always on the path),
+  //  - every visible hint cell (the player can see these are on the path),
+  //  - every help-revealed cell (functionally identical to a hint),
+  //  - every line-shaped draft (the player has marked it as "I think this is
+  //    on the path"). Cross drafts ("not on the path") are NOT included.
+  // A cell counts at most once even if it's in multiple categories.
+  const cells = new Set(userPath);
+  cells.add(keyOf(p.start));
+  cells.add(keyOf(p.goal));
+  for (const h of p.hints) cells.add(keyOf(h.cell));
+  for (const key of helpRevealedCells) cells.add(key);
+  for (const [key, sides] of userDrafts) {
+    if (isCrossGlyph(sides)) continue;
+    cells.add(key);
+  }
+  return cells;
+}
+
+function rowState(p, r) {
+  let count = 0;
+  for (const k of _occupiedCells(p)) {
+    const [_, rr] = fromKey(k);
+    if (rr === r) count++;
+  }
+  if (count > p.row_counts[r]) return "exceeded";
+  if (count === p.row_counts[r]) return "satisfied";
+  return "under";
+}
+function columnState(p, c) {
+  let count = 0;
+  for (const k of _occupiedCells(p)) {
+    const [cc] = fromKey(k);
+    if (cc === c) count++;
+  }
+  if (count > p.col_counts[c]) return "exceeded";
+  if (count === p.col_counts[c]) return "satisfied";
+  return "under";
+}
+
+function onCellClick(c, r) {
+  const key = `${c},${r}`;
+
+  // Draft mode: a glyph is selected in the palette, OR the eraser is active.
+  // Clicking a cell places/replaces/removes its draft. Tracing is suppressed
+  // while a palette selection is active; deselect (click the same glyph)
+  // to resume tracing.
+  if (selectedPaletteGlyph !== null) {
+    // Drafts only make sense on non-path cells. Skip silently otherwise.
+    if (userPath.includes(key)) return;
+    if (selectedPaletteGlyph === "erase") {
+      userDrafts.delete(key);
+    } else {
+      const existing = userDrafts.get(key);
+      if (existing && sameSides(existing, selectedPaletteGlyph)) {
+        userDrafts.delete(key);  // toggle off
+      } else {
+        userDrafts.set(key, selectedPaletteGlyph.slice());
+      }
+    }
+    render();
+    return;
+  }
+
+  // Click on tip: undo
+  if (userPath.length > 1 && userPath[userPath.length - 1] === key) {
+    userPath.pop();
+    render();
+    return;
+  }
+  // Click on cell adjacent to tip: extend
+  const tipKey = userPath[userPath.length - 1];
+  const [tc, tr] = fromKey(tipKey);
+  if (Math.abs(tc - c) + Math.abs(tr - r) === 1 && !userPath.includes(key)) {
+    userPath.push(key);
+    render();
+  }
+}
+
+function updateStatus() {
+  const p = pack.puzzles[currentIndex];
+  const status = document.getElementById("status");
+  const expected = p.solution_path.map(c => keyOf(c));
+  const won = userPath.length === expected.length
+    && userPath.every((k, i) => k === expected[i]);
+  if (won) {
+    status.textContent = "Solved!";
+    status.className = "status win";
+  } else {
+    status.textContent = "";
+    status.className = "status";
+  }
+}
+
+document.getElementById("btn-reset").addEventListener("click", () => {
+  const p = pack.puzzles[currentIndex];
+  userPath = [keyOf(p.start)];
+  // Reset clears help-revealed glyphs AND restores the full charge budget.
+  helpRevealedCells = new Set();
+  helpChargesLeft = HELP_MAX_CHARGES;
+  // Reset also clears drafts and the palette selection.
+  userDrafts = new Map();
+  selectedPaletteGlyph = null;
+  renderPalette();
+  updateHelpButton();
+  render();
+});
+document.getElementById("palette-eraser").addEventListener("click", () => {
+  selectedPaletteGlyph = selectedPaletteGlyph === "erase" ? null : "erase";
+  renderPalette();
+});
+document.getElementById("btn-solution").addEventListener("click", (e) => {
+  showSolution = !showSolution;
+  e.currentTarget.classList.toggle("active", showSolution);
+  e.currentTarget.textContent = showSolution ? "👁 Hide solution" : "👁 Show solution";
+  render();
+});
+document.getElementById("btn-help").addEventListener("click", useHelpCharge);
+document.getElementById("btn-decisions").addEventListener("click", (e) => {
+  showDecisions = !showDecisions;
+  e.currentTarget.classList.toggle("active", showDecisions);
+  e.currentTarget.textContent = showDecisions ? "🟠 Hide decisions" : "🟠 Show decisions";
+  render();
+});
+</script>
+</body>
+</html>
